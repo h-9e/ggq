@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Yijs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            background: #f1f1f1;
+            font-family: Arial, sans-serif;
+            transition: background 0.3s;
+        }
+        /* 计算器直接铺满窗口 */
+        #calculator {
+            width: 100vw;
+            height: 100vh;
+            padding: clamp(8px, 2vw, 30px);
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(6px,1vw,12px);
+        }
+        body.fullscreen {
+            background: #eaeaea;
+        }
+        #display {
+            width: 100%;
+            flex: 0 0 auto;
+            padding: clamp(8px, 2vw, 20px);
+            text-align: right;
+            font-size: clamp(26px, 9vw, 90px);
+            border: 1px solid #eee;
+            border-radius: 4px;
+            outline: none;
+            pointer-events: none;
+        }
+        .btn-row {
+            display: flex;
+            gap: clamp(4px, 0.8vw, 8px);
+            flex: 1;
+        }
+        button {
+            flex: 1;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #f5f5f5;
+            transition: background 0.2s;
+            font-size: clamp(18px, 5vw, 55px);
+        }
+        button:hover {
+            background: #e8e8e8;
+        }
+        button:active {
+            filter: brightness(0.92);
+        }
+        #micBtn {
+            background: #ff5252;
+            color: #fff;
+        }
+        #micBtn:hover {
+            background: #ff1744;
+        }
+        #clearBtn {
+            background: #ff9800;
+            color: #fff;
+        }
+        #equalBtn {
+            background: #2196f3;
+            color: #fff;
+        }
+        #fullscreenBtn {
+            background: #4caf50;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div id="calculator">
+        <input type="text" id="display" placeholder="0">
+        <!-- 新增全屏键 -->
+        <div class="btn-row">
+            <button id="fullscreenBtn" onclick="toggleFullscreen()">⛶ 全屏</button>
+            <button id="micBtn">🎙️ 语音</button>
+            <button id="clearBtn" onclick="clearDisplay()">清零</button>
+        </div>
+        <!-- 运算键行 -->
+        <div class="btn-row">
+            <button onclick="appendToDisplay('/')">÷</button>
+            <button onclick="appendToDisplay('*')">×</button>
+            <button onclick="appendToDisplay('-')">-</button>
+            <button onclick="appendToDisplay('+')">+</button>
+        </div>
+        <!-- 数字键行1 -->
+        <div class="btn-row">
+            <button onclick="appendToDisplay('7')">7</button>
+            <button onclick="appendToDisplay('8')">8</button>
+            <button onclick="appendToDisplay('9')">9</button>
+            <button id="equalBtn" onclick="calculate()">=</button>
+        </div>
+        <!-- 数字键行2 -->
+        <div class="btn-row">
+            <button onclick="appendToDisplay('4')">4</button>
+            <button onclick="appendToDisplay('5')">5</button>
+            <button onclick="appendToDisplay('6')">6</button>
+            <button onclick="appendToDisplay('.')">.</button>
+        </div>
+        <!-- 数字键行3 -->
+        <div class="btn-row">
+            <button onclick="appendToDisplay('1')">1</button>
+            <button onclick="appendToDisplay('2')">2</button>
+            <button onclick="appendToDisplay('3')">3</button>
+            <button onclick="appendToDisplay('00')">00</button>
+        </div>
+        <!-- 数字键行4 -->
+        <div class="btn-row">
+            <button onclick="appendToDisplay('0')">0</button>
+        </div>
+    </div>
+    <script>
+        const display = document.getElementById('display');
+        const micBtn = document.getElementById('micBtn');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const SpeechSynthesis = window.speechSynthesis;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        const docEl = document.documentElement;
+
+        // 全屏切换函数
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                docEl.requestFullscreen().catch(err => {
+                    alert(`全屏切换失败: ${err.message}`);
+                });
+                document.body.classList.add('fullscreen');
+                document.getElementById('fullscreenBtn').textContent = "❌ 退出全屏";
+                speak('已进入全屏模式');
+            } else {
+                document.exitFullscreen();
+                document.body.classList.remove('fullscreen');
+                document.getElementById('fullscreenBtn').textContent = "⛶ 全屏";
+                speak('已退出全屏模式');
+            }
+        }
+
+        // ===== 语音解析：中文数字/指令 -> 计算表达式 =====
+        const VOICE_DIGITS = '零一二两三四五六七八九十百千万亿';
+        const VOICE_DIGIT_MAP = { '零':0, '一':1, '两':2, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9 };
+        const VOICE_UNIT_MAP = { '十':10, '百':100, '千':1000, '万':10000, '亿':100000000 };
+
+        // 中文数字词 -> 阿拉伯数字，如 "二十五"->25, "一百二十三"->123, "十二"->12
+        function chineseToNumber(str) {
+            if (!str) return null;
+            if (!/^[零一二两三四五六七八九十百千万亿]+$/.test(str)) return null;
+            let total = 0, section = 0, num = 0;
+            for (const ch of str) {
+                if (ch in VOICE_DIGIT_MAP) { num = VOICE_DIGIT_MAP[ch]; }
+                else {
+                    const u = VOICE_UNIT_MAP[ch];
+                    if (u >= 10000) { section = (section + num) * u; total += section; section = 0; num = 0; }
+                    else { section += (num || 1) * u; num = 0; }
+                }
+            }
+            return total + section + num;
+        }
+
+        // 解析整句语音，返回 {type:'C'|'fullscreen'|'calc'|'append'|'none', expr}
+        function parseVoice(text) {
+            text = (text || '').replace(/\s+/g, '');
+            if (!text) return { type: 'none' };
+            if (/清零|清空|清除|清屏/.test(text)) return { type: 'C' };
+            if (/全屏/.test(text)) return { type: 'fullscreen' };
+            const wantCalc = /等于|结果|是多少|得多少/.test(text);
+
+            const out = [];
+            let buf = '';
+            const flush = () => {
+                if (buf) {
+                    const n = chineseToNumber(buf);
+                    if (n !== null) out.push(String(n));
+                    buf = '';
+                }
+            };
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (VOICE_DIGITS.includes(ch)) { buf += ch; continue; }
+                flush();
+                const two = text.substr(i, 2);
+                if (two === '除以') { out.push('/'); i++; continue; }
+                if (ch === '加' || two === '加上') { out.push('+'); if (two === '加上') i++; continue; }
+                if (ch === '减' || two === '减去') { out.push('-'); if (two === '减去') i++; continue; }
+                if (ch === '乘' || two === '乘以') { out.push('*'); if (two === '乘以') i++; continue; }
+                if (ch === '除') { out.push('/'); continue; }
+                if (ch === '点' || ch === '.') {
+                    if (out.length) out[out.length - 1] += '.';
+                    continue;
+                }
+            }
+            flush();
+            const expr = out.join('');
+            if (!expr) return { type: 'none' };
+            return wantCalc ? { type: 'calc', expr } : { type: 'append', expr };
+        }
+
+        // 消除浮点精度误差，如 0.1+0.2 -> 0.3
+        function roundResult(v) {
+            if (typeof v !== 'number' || !isFinite(v)) return v;
+            return parseFloat(v.toPrecision(12));
+        }
+
+        // 语音识别初始化
+        if (recognition) {
+            recognition.lang = 'zh-CN';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+            micBtn.addEventListener('click', () => {
+                try {
+                    recognition.start();
+                    micBtn.style.background = '#ff8a80';
+                    speak('请说出计算指令');
+                } catch (e) {
+                    alert('语音识别启动失败，请检查麦克风权限');
+                }
+            });
+            recognition.onresult = (event) => {
+                const transcript = (event.results[0][0].transcript || '').trim();
+                const parsed = parseVoice(transcript);
+                if (parsed.type === 'C') {
+                    clearDisplay();
+                    speak('已清零');
+                } else if (parsed.type === 'fullscreen') {
+                    toggleFullscreen();
+                } else if (parsed.type === 'calc') {
+                    display.value = parsed.expr;
+                    calculate();
+                } else if (parsed.type === 'append') {
+                    display.value += parsed.expr;
+                } else {
+                    speak('未识别到有效指令，请重试');
+                }
+                micBtn.style.background = '#ff5252';
+            };
+            recognition.onend = () => {
+                micBtn.style.background = '#ff5252';
+            };
+        } else {
+            micBtn.disabled = true;
+            micBtn.textContent = '语音不支持';
+        }
+
+        // 语音播报
+        function speak(text) {
+            if (!SpeechSynthesis) return;
+            SpeechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-CN';
+            utterance.rate = 1;
+            SpeechSynthesis.speak(utterance);
+        }
+
+        // 追加内容
+        function appendToDisplay(content) {
+            display.value += content;
+        }
+
+        // 清空显示
+        function clearDisplay() {
+            display.value = '';
+        }
+
+        // 计算逻辑
+        function calculate() {
+            try {
+                const expression = display.value.replace('×', '*').replace('÷', '/');
+                const result = roundResult(Function(`'use strict';return (${expression})`)());
+                display.value = String(result);
+                speak(`计算结果是${result}`);
+            } catch (e) {
+                display.value = '错误';
+                speak('输入格式错误，请重新输入');
+                setTimeout(() => display.value = '', 2000);
+            }
+        }
+
+        // ========== 新增电脑键盘监听 ==========
+        document.addEventListener('keydown', function(e) {
+            const key = e.key;
+            // 数字 . + - * /
+            if ('0123456789.+-*/'.includes(key)) {
+                e.preventDefault();
+                appendToDisplay(key);
+            }
+            // 回车 = 计算
+            else if (key === 'Enter') {
+                e.preventDefault();
+                calculate();
+            }
+            // ESC 清零
+            else if (key === 'Escape') {
+                e.preventDefault();
+                clearDisplay();
+            }
+            // 退格 Backspace 删除最后一位
+            else if (key === 'Backspace') {
+                e.preventDefault();
+                display.value = display.value.slice(0, -1);
+            }
+        })
+    </script>
+</body>
+</html>
