@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收支2026模板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            min-height: 100vh;
+            padding: 24px 10px;
+            color: #e8edf2;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(125, 211, 252, 0.28), transparent 26%),
+                radial-gradient(circle at 80% 10%, rgba(167, 139, 250, 0.22), transparent 28%),
+                radial-gradient(circle at 50% 90%, rgba(96, 165, 250, 0.18), transparent 30%),
+                linear-gradient(135deg, #020617 0%, #0b1224 45%, #020617 100%);
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(125, 211, 252, 0.28), transparent 26%),
+                radial-gradient(circle at 80% 10%, rgba(167, 139, 250, 0.22), transparent 28%),
+                radial-gradient(circle at 50% 90%, rgba(96, 165, 250, 0.18), transparent 30%),
+                linear-gradient(135deg, #020617 0%, #0b1224 45%, #020617 100%),
+                linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+            background-size: auto, auto, auto, auto, auto, 22px 22px, 22px 22px;
+            position: relative;
+            overflow-x: hidden;
+        }
+        .glass-wrap {
+            position: relative;
+            z-index: 1;
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(18px) saturate(140%);
+            -webkit-backdrop-filter: blur(18px) saturate(140%);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.45),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 1px 0 rgba(255, 255, 255, 0.25) inset;
+            overflow: hidden;
+        }
+        .search-container {
+            padding: 30px 20px;
+            text-align: center;
+            background: rgba(255,255,255,0.05);
+       
+        }
+        #search-input {
+            padding: 14px 24px;
+            width: 85%;
+            max-width: 460px;
+            border: 1px solid rgba(125, 211, 252, 0.45);
+            border-radius: 30px;
+            font-size: 17px;
+            outline: none;
+            transition: all 0.35s ease;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow:
+                inset 0 0 24px rgba(125, 211, 252, 0.1),
+                0 0 16px rgba(125, 211, 252, 0.18);
+        }
+        #search-input:focus {
+            width: 90%;
+            border-color: #7dd3fc;
+            box-shadow:
+                inset 0 0 30px rgba(125, 211, 252, 0.2),
+                0 0 26px rgba(125, 211, 252, 0.45);
+        }
+        #search-input::placeholder {
+            color: rgba(255,255,255,0.55);
+        }
+        .header {
+            padding: 0;
+        }
+        .summary {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            padding: 24px 14px;
+            background: rgba(255,255,255,0.04);
+ 
+            font-size: 16px;
+            flex-wrap: wrap;
+        }
+     
+        .summary-item {
+            width: 140px;
+            height: 140px;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.07);
+            backdrop-filter: blur(14px) saturate(140%);
+            -webkit-backdrop-filter: blur(14px) saturate(140%);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow:
+                0 8px 24px rgba(0, 0, 0, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+                0 1px 0 rgba(255, 255, 255, 0.22) inset;
+        }
+        .summary-item .value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        .summary-item.income {
+            color: #facc15;
+            text-shadow: 0 0 12px rgba(250, 204, 21, 0.45);
+        }
+        .summary-item.expense {
+            color: #FF00FF;
+            text-shadow: 0 0 12px rgba(255, 122, 100, 0.45);
+        }
+        .summary-item.total {
+            color: #60a5fa;
+            text-shadow: 0 0 14px rgba(96, 165, 250, 0.55);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead {
+            background-color: rgba(255,255,255,0.06);
+        }
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: none;
+        }
+        th {
+            font-weight: 600;
+            color: #cbd5e1;
+            letter-spacing: 1px;
+            font-size: 14px;
+        }
+        .amount {
+            text-align: right;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        /* 收入整行金黄色 */
+        .row-income td {
+            color: #facc15;
+            font-weight: 600;
+        }
+        /* 支出整行红色 */
+        .row-expense td {
+            color: #ef4444;
+            font-weight: 600;
+        }
+        .no-data {
+            text-align: center;
+            padding: 34px;
+            color: rgba(255,255,255,0.45);
+            font-style: italic;
+        }
+        @media (max-width: 600px) {
+            .search-container {
+                padding: 24px 16px;
+            }
+            #search-input {
+                width: 92%;
+                padding: 12px 20px;
+                font-size: 16px;
+            }
+            .summary {
+                gap: 10px;
+                padding: 18px 12px;
+                justify-content: center;
+            }
+     
+            .summary-item {
+                width: 96px;
+                height: 50px;
+                border-radius: 14px;
+            }
+            .summary-item .value {
+                font-size: 16px;
+            }
+            th, td {
+                padding: 10px 12px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="glass-wrap">
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="🔍 输入关键词搜索（日期/类别/描述）..." />
+        </div>
+        <div class="header"></div>
+        <div class="summary">
+            <div class="summary-item income">
+                <span class="value" id="total-income">0.00</span>
+            </div>
+            <div class="summary-item expense">
+                <span class="value" id="total-expense">0.00</span>
+            </div>
+            <div class="summary-item total">
+                <span class="value" id="net-balance">0.00</span>
+            </div>
+        </div>
+        <table id="transaction-table">
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th>类别</th>
+                    <th>描述</th>
+                    <th class="amount">金额</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+    <script>
+        const transactions = [
+            { date: '2026-8-26', type: 'income', category: '其它', desc: '奖励', amount: 100.00 },
+            { date: '2026-3-10', type: 'expense', category: '信用卡', desc: '农业银行还款账单', amount: 2017.69 }
+        ];
+        const searchInput = document.getElementById('search-input');
+        function renderTable(filterText = '') {
+            const tbody = document.getElementById('table-body');
+            let incomeTotal = 0;
+            let expenseTotal = 0;
+            transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+            tbody.innerHTML = '';
+            const filteredTransactions = transactions.filter(tx => {
+                const searchText = filterText.toLowerCase();
+                return tx.date.includes(searchText) ||
+                    tx.category.toLowerCase().includes(searchText) ||
+                    tx.desc.toLowerCase().includes(searchText);
+            });
+            if (filteredTransactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">未记录</td></tr>';
+                document.getElementById('total-income').textContent = '0.00';
+                document.getElementById('total-expense').textContent = '0.00';
+                document.getElementById('net-balance').textContent = '0.00';
+                return;
+            }
+            filteredTransactions.forEach(tx => {
+                const row = document.createElement('tr');
+                // 给tr添加行样式类
+                row.className = tx.type === 'income' ? 'row-income' : 'row-expense';
+                if (tx.type === 'income') incomeTotal += tx.amount;
+                else expenseTotal += tx.amount;
+                row.innerHTML = `
+                    <td>${tx.date}</td>
+                    <td>${tx.category}</td>
+                    <td>${tx.desc}</td>
+                    <td class="amount">
+                        ${tx.type === 'income' ? '+' : '-'} ${formatCurrency(tx.amount)}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            document.getElementById('total-income').textContent = formatCurrency(incomeTotal);
+            document.getElementById('total-expense').textContent = formatCurrency(expenseTotal);
+            document.getElementById('net-balance').textContent = formatCurrency(incomeTotal - expenseTotal);
+        }
+        function formatCurrency(num) {
+            return num.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+        }
+        searchInput.addEventListener('input', function (e) {
+            renderTable(e.target.value);
+        });
+        document.addEventListener('DOMContentLoaded', () => {
+            renderTable();
+        });
+    </script>
+</body>
+</html>
