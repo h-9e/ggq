@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极简记账</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            color: #333;
+            line-height: 1.5;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: normal;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .input-area, .tool-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        input, select, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #666;
+        }
+        button {
+            background-color: #666;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        .tool-area button {
+            background-color: #555;
+        }
+        .record-list {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        th {
+            font-weight: normal;
+            background-color: #f8f8f8;
+        }
+        .income {
+            color: #2ecc71;
+        }
+        .expense {
+            color: #e74c3c;
+        }
+        .stats {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .stats span {
+            margin-right: 15px;
+        }
+        .delete-btn {
+            color: #e74c3c;
+            background: transparent;
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .delete-btn:hover {
+            background-color: #fef0f0;
+        }
+        #file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+   
+
+    <!-- 工具区域：导出/导入/分类筛选 -->
+    <div class="tool-area">
+        <button id="export-btn">导出数据</button>
+        <label for="file-input" style="cursor: pointer; border:1px solid #ddd; padding:8px 12px; border-radius:4px;">导入数据</label>
+        <input type="file" id="file-input" accept=".json">
+        <select id="category-filter">
+            <option value="all">全部分类</option>
+        </select>
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="input-area">
+        <input type="date" id="date" required>
+        <select id="type" required>
+            <option value="income">收入</option>
+            <option value="expense">支出</option>
+        </select>
+        <input type="text" id="category" placeholder="分类（如餐饮/工资）" required>
+        <input type="number" id="amount" placeholder="金额" step="0.01" required>
+        <input type="text" id="remark" placeholder="备注（可选）">
+        <button id="add-btn">添加记录</button>
+    </div>
+
+    <!-- 统计区域 -->
+    <div class="stats">
+        <span>总收入: <span id="total-income" class="income">0.00</span> 元</span>
+        <span>总支出: <span id="total-expense" class="expense">0.00</span> 元</span>
+        <span>结余: <span id="balance">0.00</span> 元</span>
+    </div>
+
+    <!-- 记录列表 -->
+    <div class="record-list">
+        <table>
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th>类型</th>
+                    <th>分类</th>
+                    <th>金额</th>
+                    <th>备注</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="record-body"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // 初始化日期
+        document.getElementById('date').valueAsDate = new Date();
+        // 读取localStorage数据
+        let records = JSON.parse(localStorage.getItem('accountRecords')) || [];
+        const categoryFilter = document.getElementById('category-filter');
+
+        // 获取所有唯一分类
+        function getUniqueCategories() {
+            return [...new Set(records.map(record => record.category))];
+        }
+
+        // 更新分类筛选下拉框
+        function updateCategoryFilter() {
+            const uniqueCats = getUniqueCategories();
+            // 保留“全部分类”选项
+            categoryFilter.innerHTML = '<option value="all">全部分类</option>';
+            uniqueCats.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                categoryFilter.appendChild(option);
+            });
+        }
+
+        // 渲染记录（支持筛选）
+        function renderRecords() {
+            const tbody = document.getElementById('record-body');
+            tbody.innerHTML = '';
+            // 获取筛选分类
+            const selectedCat = categoryFilter.value;
+            // 筛选数据
+            const filteredRecords = selectedCat === 'all' 
+                ? records 
+                : records.filter(record => record.category === selectedCat);
+
+            filteredRecords.forEach((record, index) => {
+                // 找到原数据中的索引，用于删除操作
+                const originalIndex = records.findIndex(r => 
+                    r.date === record.date && r.category === record.category && r.amount === record.amount
+                );
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${record.date}</td>
+                    <td class="${record.type}">${record.type === 'income' ? '收入' : '支出'}</td>
+                    <td>${record.category}</td>
+                    <td class="${record.type}">${parseFloat(record.amount).toFixed(2)}</td>
+                    <td>${record.remark || '-'}</td>
+                    <td><button class="delete-btn" data-index="${originalIndex}">删除</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            // 绑定删除事件
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = e.target.dataset.index;
+                    records.splice(index, 1);
+                    saveRecords();
+                    updateCategoryFilter();
+                    renderRecords();
+                    calculateStats();
+                });
+            });
+        }
+
+        // 计算统计
+        function calculateStats() {
+            const income = records.filter(r => r.type === 'income').reduce((sum, r) => sum + parseFloat(r.amount), 0);
+            const expense = records.filter(r => r.type === 'expense').reduce((sum, r) => sum + parseFloat(r.amount), 0);
+            const balance = income - expense;
+            document.getElementById('total-income').textContent = income.toFixed(2);
+            document.getElementById('total-expense').textContent = expense.toFixed(2);
+            document.getElementById('balance').textContent = balance.toFixed(2);
+        }
+
+        // 保存到localStorage
+        function saveRecords() {
+            localStorage.setItem('accountRecords', JSON.stringify(records));
+        }
+
+        // 添加记录
+        document.getElementById('add-btn').addEventListener('click', () => {
+            const date = document.getElementById('date').value;
+            const type = document.getElementById('type').value;
+            const category = document.getElementById('category').value.trim();
+            const amount = document.getElementById('amount').value.trim();
+            const remark = document.getElementById('remark').value.trim();
+
+            if (!date || !type || !category || !amount) return;
+
+            records.push({ date, type, category, amount, remark });
+            saveRecords();
+            updateCategoryFilter();
+            renderRecords();
+            calculateStats();
+
+            // 清空输入框
+            document.getElementById('category').value = '';
+            document.getElementById('amount').value = '';
+            document.getElementById('remark').value = '';
+        });
+
+        // 导出数据为JSON文件
+        document.getElementById('export-btn').addEventListener('click', () => {
+            if (records.length === 0) {
+                alert('暂无记录可导出');
+                return;
+            }
+            const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            const dateStr = new Date().toISOString().split('T')[0];
+            a.download = `记账_${dateStr}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+
+        // 导入本地JSON文件
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.type !== 'application/json') {
+                alert('请导入JSON格式文件');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    if (Array.isArray(importedData)) {
+                        records = importedData;
+                        saveRecords();
+                        updateCategoryFilter();
+                        renderRecords();
+                        calculateStats();
+                        alert('数据导入成功');
+                    } else {
+                        alert('导入数据格式错误');
+                    }
+                } catch (err) {
+                    alert('导入失败：文件内容无效');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        // 分类筛选事件
+        categoryFilter.addEventListener('change', renderRecords);
+
+        // 初始渲染
+        updateCategoryFilter();
+        renderRecords();
+        calculateStats();
+    </script>
+</body>
+</html>
