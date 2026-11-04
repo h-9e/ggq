@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>时钟</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0f1419;
+      --bg-secondary: #1a2028;
+      --fg-primary: #e8e6e3;
+      --fg-secondary: #6b7280;
+      --fg-muted: #3d4450;
+      --accent: #c9a962;
+      --accent-dim: rgba(201, 169, 98, 0.15);
+      --control-bg: rgba(26, 32, 40, 0.8);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Serif SC', serif;
+      background: var(--bg-primary);
+      color: var(--fg-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: 
+        radial-gradient(ellipse at 20% 30%, rgba(201, 169, 98, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 70%, rgba(100, 120, 150, 0.04) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    body::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      pointer-events: none;
+    }
+
+    .clock-container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .time-display {
+      font-family: 'Space Mono', monospace;
+      font-size: clamp(4rem, 15vw, 10rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.05em;
+    }
+
+    .time-segment {
+      display: inline-flex;
+      position: relative;
+    }
+
+    .time-digit {
+      display: inline-block;
+      min-width: 0.65em;
+      text-align: center;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    .time-digit.changing {
+      opacity: 0.6;
+      transform: translateY(-2px);
+    }
+
+    .time-separator {
+      color: var(--fg-muted);
+      margin: 0 0.05em;
+      opacity: 0.6;
+    }
+
+    .seconds {
+      font-size: 0.5em;
+      color: var(--fg-secondary);
+      vertical-align: baseline;
+      margin-left: 0.3em;
+      position: relative;
+    }
+
+    .seconds::before {
+      content: '';
+      position: absolute;
+      left: -0.2em;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 1px;
+      height: 1.2em;
+      background: var(--fg-muted);
+    }
+
+    .lunar-container {
+      position: relative;
+      padding: 1.5rem 2.5rem;
+      background: var(--accent-dim);
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .lunar-container::before,
+    .lunar-container::after {
+      content: '';
+      position: absolute;
+      width: 30px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      top: 50%;
+    }
+
+    .lunar-container::before { left: -40px; }
+    .lunar-container::after { right: -40px; }
+
+    .lunar-date {
+      font-size: clamp(1.2rem, 4vw, 1.6rem);
+      color: var(--fg-primary);
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.5rem;
+    }
+
+    .lunar-detail {
+      font-size: clamp(0.75rem, 2vw, 0.875rem);
+      color: var(--fg-secondary);
+      font-weight: 300;
+      letter-spacing: 0.08em;
+    }
+
+    .lunar-highlight {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* 控制栏 */
+    .control-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.5rem;
+      z-index: 10;
+      opacity: 0.4;
+      transition: opacity 0.3s ease;
+    }
+
+    .control-bar:hover {
+      opacity: 1;
+    }
+
+    .control-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      background: var(--control-bg);
+      border: 1px solid var(--fg-muted);
+      border-radius: 4px;
+      color: var(--fg-secondary);
+      font-family: 'Noto Serif SC', serif;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .control-btn:hover {
+      border-color: var(--fg-secondary);
+      color: var(--fg-primary);
+    }
+
+    .control-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .control-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .control-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.5;
+    }
+
+    /* 状态指示点 */
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--fg-muted);
+      transition: background 0.2s ease;
+    }
+
+    .control-btn.active .status-dot {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    /* 不支持提示 */
+    .control-btn.unsupported {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .decoration-line {
+      position: absolute;
+      background: var(--fg-muted);
+      opacity: 0.3;
+    }
+
+    .decoration-line.top {
+      top: 15%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1px;
+      height: 60px;
+    }
+
+    .decoration-line.bottom {
+      bottom: 15%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1px;
+      height: 60px;
+    }
+
+    /* 入场动画 */
+    .fade-in {
+      animation: fadeIn 0.8s ease-out forwards;
+      opacity: 0;
+    }
+
+    .fade-in-delay-1 { animation-delay: 0.1s; }
+    .fade-in-delay-2 { animation-delay: 0.25s; }
+    .fade-in-delay-3 { animation-delay: 0.4s; }
+    .fade-in-delay-4 { animation-delay: 0.55s; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 全屏时隐藏控制栏 */
+    :fullscreen .control-bar,
+    :-webkit-full-screen .control-bar {
+      opacity: 0.2;
+    }
+
+    :fullscreen .control-bar:hover,
+    :-webkit-full-screen .control-bar:hover {
+      opacity: 1;
+    }
+
+    /* 减少动画 */
+    @media (prefers-reduced-motion: reduce) {
+      .fade-in { animation: none; opacity: 1; }
+      .time-digit.changing { transform: none; }
+    }
+
+    @media (max-width: 640px) {
+      .lunar-container::before,
+      .lunar-container::after {
+        display: none;
+      }
+      .control-bar {
+        gap: 0.75rem;
+        padding: 1rem;
+      }
+      .control-btn {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+      }
+      .control-btn span {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="decoration-line top"></div>
+  
+  <div class="clock-container">
+    <div class="time-display fade-in fade-in-delay-1" id="timeDisplay">
+      <span class="time-segment" id="hours">
+        <span class="time-digit">0</span>
+        <span class="time-digit">0</span>
+      </span>
+      <span class="time-separator">:</span>
+      <span class="time-segment" id="minutes">
+        <span class="time-digit">0</span>
+        <span class="time-digit">0</span>
+      </span>
+      <span class="seconds" id="seconds">00</span>
+    </div>
+
+    <!-- 已移除公历日期div：dateDisplay -->
+
+    <div class="lunar-container fade-in fade-in-delay-2">
+      <div class="lunar-date" id="lunarDate"></div>
+      <div class="lunar-detail">
+        <span id="lunarYear"></span>
+        <span class="lunar-highlight" id="lunarTerm"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 控制栏 -->
+  <div class="control-bar fade-in fade-in-delay-4">
+    <button class="control-btn" id="fullscreenBtn" aria-label="切换全屏">
+      <svg id="fullscreenIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+      </svg>
+      <span>全屏</span>
+      <span class="status-dot"></span>
+    </button>
+    
+    <button class="control-btn" id="wakeLockBtn" aria-label="阻止休眠">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      <span>常亮</span>
+      <span class="status-dot"></span>
+    </button>
+  </div>
+
+  <div class="decoration-line bottom"></div>
+
+  <script>
+    // 农历数据
+    const lunarInfo = [
+      0x04bd8, 0x04ae0, 0x0a570, 0x054d5, 0x0d260, 0x0d950, 0x16554, 0x056a0, 0x09ad0, 0x055d2,
+      0x04ae0, 0x0a5b6, 0x0a4d0, 0x0d250, 0x1d255, 0x0b540, 0x0d6a0, 0x0ada2, 0x095b0, 0x14977,
+      0x04970, 0x0a4b0, 0x0b4b5, 0x06a50, 0x06d40, 0x1ab54, 0x02b60, 0x09570, 0x052f2, 0x04970,
+      0x06566, 0x0d4a0, 0x0ea50, 0x06e95, 0x05ad0, 0x02b60, 0x186e3, 0x092e0, 0x1c8d7, 0x0c950,
+      0x0d4a0, 0x1d8a6, 0x0b550, 0x056a0, 0x1a5b4, 0x025d0, 0x092d0, 0x0d2b2, 0x0a950, 0x0b557,
+      0x06ca0, 0x0b550, 0x15355, 0x04da0, 0x0a5b0, 0x14573, 0x052b0, 0x0a9a8, 0x0e950, 0x06aa0,
+      0x0aea6, 0x0ab50, 0x04b60, 0x0aae4, 0x0a570, 0x05260, 0x0f263, 0x0d950, 0x05b57, 0x056a0,
+      0x096d0, 0x04dd5, 0x04ad0, 0x0a4d0, 0x0d4d4, 0x0d250, 0x0d558, 0x0b540, 0x0b6a0, 0x195a6,
+      0x095b0, 0x049b0, 0x0a974, 0x0a4b0, 0x0b27a, 0x06a50, 0x06d40, 0x0af46, 0x0ab60, 0x09570,
+      0x04af5, 0x04970, 0x064b0, 0x074a3, 0x0ea50, 0x06b58, 0x055c0, 0x0ab60, 0x096d5, 0x092e0,
+      0x0c960, 0x0d954, 0x0d4a0, 0x0da50, 0x07552, 0x056a0, 0x0abb7, 0x025d0, 0x092d0, 0x0cab5,
+      0x0a950, 0x0b4a0, 0x0baa4, 0x0ad50, 0x055d9, 0x04ba0, 0x0a5b0, 0x15176, 0x052b0, 0x0a930,
+      0x07954, 0x06aa0, 0x0ad50, 0x05b52, 0x04b60, 0x0a6e6, 0x0a4e0, 0x0d260, 0x0ea65, 0x0d530,
+      0x05aa0, 0x076a3, 0x096d0, 0x04afb, 0x04ad0, 0x0a4d0, 0x1d0b6, 0x0d250, 0x0d520, 0x0dd45,
+      0x0b5a0, 0x056d0, 0x055b2, 0x049b0, 0x0a577, 0x0a4b0, 0x0aa50, 0x1b255, 0x06d20, 0x0ada0,
+      0x14b63, 0x09370, 0x049f8, 0x04970, 0x064b0, 0x168a6, 0x0ea50, 0x06b20, 0x1a6c4, 0x0aae0,
+      0x0a2e0, 0x0d2e3, 0x0c960, 0x0d557, 0x0d4a0, 0x0da50, 0x05d55, 0x056a0, 0x0a6d0, 0x055d4,
+      0x052d0, 0x0a9b8, 0x0a950, 0x0b4a0, 0x0b6a6, 0x0ad50, 0x055a0, 0x0aba4, 0x0a5b0, 0x052b0,
+      0x0b273, 0x06930, 0x07337, 0x06aa0, 0x0ad50, 0x14b55, 0x04b60, 0x0a570, 0x054e4, 0x0d160,
+      0x0e968, 0x0d520, 0x0daa0, 0x16aa6, 0x056d0, 0x04ae0, 0x0a9d4, 0x0a2d0, 0x0d150, 0x0f252
+    ];
+
+    const tianGan = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+    const diZhi = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+    const shengXiao = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
+    const lunarMonths = ['正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '冬', '腊'];
+    const lunarDays = [
+      '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
+      '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+      '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'
+    ];
+    // 已删除星期数组 weekDays
+
+    const solarTerms = [
+      '小寒', '大寒', '立春', '雨水', '惊蛰', '春分',
+      '清明', '谷雨', '立夏', '小满', '芒种', '夏至',
+      '小暑', '大暑', '立秋', '处暑', '白露', '秋分',
+      '寒露', '霜降', '立冬', '小雪', '大雪', '冬至'
+    ];
+
+    const solarTermInfo = [
+      0, 21208, 42467, 63836, 85337, 107014,
+      128867, 150921, 173149, 195551, 218072, 240693,
+      263343, 285989, 308563, 331033, 353350, 375494,
+      397447, 419210, 440795, 462224, 483532, 504758
+    ];
+
+    function lYearDays(y) {
+      let sum = 348;
+      for (let i = 0x8000; i > 0x8; i >>= 1) {
+        sum += (lunarInfo[y - 1900] & i) ? 1 : 0;
+      }
+      return sum + leapDays(y);
+    }
+
+    function leapDays(y) {
+      if (leapMonth(y)) {
+        return (lunarInfo[y - 1900] & 0x10000) ? 30 : 29;
+      }
+      return 0;
+    }
+
+    function leapMonth(y) {
+      return lunarInfo[y - 1900] & 0xf;
+    }
+
+    function monthDays(y, m) {
+      return (lunarInfo[y - 1900] & (0x10000 >> m)) ? 30 : 29;
+    }
+
+    function solarToLunar(year, month, day) {
+      let offset = Math.floor((Date.UTC(year, month - 1, day) - Date.UTC(1900, 0, 31)) / 86400000);
+      
+      let lunarYear, lunarMonth, lunarDay;
+      let isLeap = false;
+
+      for (lunarYear = 1900; lunarYear < 2100 && offset > 0; lunarYear++) {
+        let daysInYear = lYearDays(lunarYear);
+        offset -= daysInYear;
+      }
+      if (offset < 0) {
+        offset += lYearDays(--lunarYear);
+      }
+
+      let leap = leapMonth(lunarYear);
+      for (lunarMonth = 1; lunarMonth < 13 && offset > 0; lunarMonth++) {
+        if (leap > 0 && lunarMonth === leap + 1 && !isLeap) {
+          --lunarMonth;
+          isLeap = true;
+          let daysInMonth = leapDays(lunarYear);
+          offset -= daysInMonth;
+        } else {
+          let daysInMonth = monthDays(lunarYear, lunarMonth);
+          offset -= daysInMonth;
+        }
+        if (isLeap && lunarMonth === leap + 1) {
+          isLeap = false;
+        }
+      }
+
+      if (offset === 0 && leap > 0 && lunarMonth === leap + 1) {
+        if (isLeap) {
+          isLeap = false;
+        } else {
+          isLeap = true;
+          --lunarMonth;
+        }
+      }
+
+      if (offset < 0) {
+        offset += monthDays(lunarYear, --lunarMonth);
+      }
+
+      lunarDay = offset + 1;
+
+      return { year: lunarYear, month: lunarMonth, day: lunarDay, isLeap: isLeap };
+    }
+
+    function getSolarTerm(year, month, day) {
+      const baseDate = new Date(1900, 0, 6, 2, 5, 0);
+      
+      for (let i = 0; i < 24; i++) {
+        const termDate = new Date(baseDate.getTime() + solarTermInfo[i] * 60000);
+        const termYear = termDate.getFullYear();
+        const termMonth = termDate.getMonth() + 1;
+        const termDay = termDate.getDate();
+        
+        if (termYear === year && termMonth === month && termDay === day) {
+          return solarTerms[i];
+        }
+      }
+      return '';
+    }
+
+    function getGanZhiYear(lunarYear) {
+      const ganIndex = (lunarYear - 4) % 10;
+      const zhiIndex = (lunarYear - 4) % 12;
+      return tianGan[ganIndex] + diZhi[zhiIndex];
+    }
+
+    // DOM元素
+    const hoursEl = document.getElementById('hours');
+    const minutesEl = document.getElementById('minutes');
+    const secondsEl = document.getElementById('seconds');
+    // 已删除公历日期dom：dateDisplayEl
+    const lunarDateEl = document.getElementById('lunarDate');
+    const lunarYearEl = document.getElementById('lunarYear');
+    const lunarTermEl = document.getElementById('lunarTerm');
+
+    // 全屏按钮
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const fullscreenIcon = document.getElementById('fullscreenIcon');
+    
+    // Wake Lock 按钮
+    const wakeLockBtn = document.getElementById('wakeLockBtn');
+
+    let lastSeconds = -1;
+    let lastMinutes = -1;
+    let lastHours = -1;
+    let wakeLock = null;
+
+    function updateTimeDigits(element, value, lastValue) {
+      const digits = element.querySelectorAll('.time-digit');
+      const str = value.toString().padStart(2, '0');
+      const lastStr = lastValue.toString().padStart(2, '0');
+      
+      digits.forEach((digit, i) => {
+        if (str[i] !== lastStr[i]) {
+          digit.classList.add('changing');
+          setTimeout(() => {
+            digit.textContent = str[i];
+            digit.classList.remove('changing');
+          }, 75);
+        }
+      });
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const seconds = now.getSeconds();
+
+      if (hours !== lastHours) {
+        updateTimeDigits(hoursEl, hours, lastHours >= 0 ? lastHours : hours);
+        lastHours = hours;
+      }
+      if (minutes !== lastMinutes) {
+        updateTimeDigits(minutesEl, minutes, lastMinutes >= 0 ? lastMinutes : minutes);
+        lastMinutes = minutes;
+      }
+      
+      secondsEl.textContent = seconds.toString().padStart(2, '0');
+
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+      // 删除星期获取代码，不再渲染公历日期
+      // const weekDay = now.getDay();
+      // dateDisplayEl.textContent = `${year}年${month}月${day}日 ${weekDays[weekDay]}`;
+
+      const lunar = solarToLunar(year, month, day);
+      const lunarMonthStr = (lunar.isLeap ? '闰' : '') + lunarMonths[lunar.month - 1] + '月';
+      
+      lunarDateEl.textContent = lunarMonthStr + lunarDays[lunar.day - 1];
+      
+      const ganZhiYear = getGanZhiYear(lunar.year);
+      const shengXiaoYear = shengXiao[(lunar.year - 4) % 12];
+      lunarYearEl.textContent = `${ganZhiYear}年 · ${shengXiaoYear}年`;
+
+      const term = getSolarTerm(year, month, day);
+      lunarTermEl.textContent = term ? ` · ${term}` : '';
+    }
+
+    // 全屏功能
+    function toggleFullscreen() {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    }
+
+    function updateFullscreenUI() {
+      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      fullscreenBtn.classList.toggle('active', isFullscreen);
+      
+      if (isFullscreen) {
+        fullscreenIcon.innerHTML = '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>';
+      } else {
+        fullscreenIcon.innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>';
+      }
+    }
+
+    // Wake Lock 功能
+    async function toggleWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          if (wakeLock) {
+            await wakeLock.release();
+            wakeLock = null;
+            wakeLockBtn.classList.remove('active');
+          } else {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLockBtn.classList.add('active');
+            
+            wakeLock.addEventListener('release', () => {
+              wakeLock = null;
+              wakeLockBtn.classList.remove('active');
+            });
+          }
+        } catch (err) {
+          console.log('Wake Lock error:', err.message);
+        }
+      } else {
+        wakeLockBtn.classList.add('unsupported');
+        wakeLockBtn.title = '您的浏览器不支持此功能';
+      }
+    }
+
+    // 页面可见性变化时重新请求 Wake Lock
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && wakeLockBtn.classList.contains('active')) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+            wakeLockBtn.classList.remove('active');
+          });
+        } catch (err) {
+          wakeLockBtn.classList.remove('active');
+        }
+      }
+    });
+
+    // 事件监听
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+    wakeLockBtn.addEventListener('click', toggleWakeLock);
+
+    document.addEventListener('fullscreenchange', updateFullscreenUI);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      } else if (e.key === 's' || e.key === 'S') {
+        toggleWakeLock();
+      }
+    });
+
+    // 初始化
+    function init() {
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+
+      hoursEl.querySelectorAll('.time-digit').forEach((d, i) => d.textContent = hours[i]);
+      minutesEl.querySelectorAll('.time-digit').forEach((d, i) => d.textContent = minutes[i]);
+
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      // 检查 Wake Lock 支持性
+      if (!('wakeLock' in navigator)) {
+        wakeLockBtn.classList.add('unsupported');
+        wakeLockBtn.title = '您的浏览器不支持此功能';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
